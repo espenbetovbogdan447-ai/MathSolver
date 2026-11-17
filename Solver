@@ -1,0 +1,165 @@
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class Solver {
+
+    public static double parseNum(String s) {
+        if (s == null) throw new NumberFormatException("Пустая строка");
+        return Double.parseDouble(s.trim().replace(',', '.'));
+    }
+
+    public static double[][] gaussJordan(double[][] matrix) {
+        int n = matrix.length;
+        double[][] A = new double[n][n + 1];
+        for (int i = 0; i < n; i++) System.arraycopy(matrix[i], 0, A[i], 0, n + 1);
+        for (int i = 0; i < n; i++) {
+            int maxRow = i;
+            for (int k = i + 1; k < n; k++)
+                if (Math.abs(A[k][i]) > Math.abs(A[maxRow][i])) maxRow = k;
+            double[] tmp = A[i]; A[i] = A[maxRow]; A[maxRow] = tmp;
+            double pivot = A[i][i];
+            for (int j = i; j <= n; j++) A[i][j] /= pivot;
+            for (int k = 0; k < n; k++) {
+                if (k != i) {
+                    double f = A[k][i];
+                    for (int j = i; j <= n; j++) A[k][j] -= f * A[i][j];
+                }
+            }
+        }
+        return A;
+    }
+
+    public static String differentiate(String expr) {
+        expr = expr.toLowerCase().replace(" ", "").replace(',', '.');
+        StringBuilder result = new StringBuilder();
+        for (String t : expr.split("(?=[+-])")) {
+            if (t.isEmpty()) continue;
+            String sign = "";
+            if (t.startsWith("+")) t = t.substring(1);
+            else if (t.startsWith("-")) { sign = "-"; t = t.substring(1); }
+            String d = derivativeOfTerm(t);
+            if (d.isEmpty()) continue;
+            if (sign.equals("-")) d = "-" + d;
+            else if (result.length() > 0 && !d.startsWith("-")) d = "+" + d;
+            result.append(d);
+        }
+        String r = result.toString();
+        if (r.startsWith("+")) r = r.substring(1);
+        return r.isEmpty() ? "0" : r;
+    }
+
+    private static String derivativeOfTerm(String t) {
+        if (t.equals("sin(x)")) return "cos(x)";
+        if (t.equals("cos(x)")) return "-sin(x)";
+        if (t.equals("e^x")) return "e^x";
+        if (t.equals("ln(x)")) return "1/x";
+        if (t.equals("x")) return "1";
+        if (t.matches("-?\\d+(\\.\\d+)?")) return "0";
+        Matcher m = Pattern.compile("(-?\\d*\\.?\\d*)\\*?x(?:\\^(\\d+))?").matcher(t);
+        if (m.matches()) {
+            String aStr = m.group(1);
+            double a = aStr.isEmpty() ? 1 : aStr.equals("-") ? -1 : parseNum(aStr);
+            int n = m.group(2) == null ? 1 : Integer.parseInt(m.group(2));
+            double nA = a * n;
+            int nN = n - 1;
+            if (nN == 0) return fmt(nA);
+            if (nN == 1) return fmt(nA) + "x";
+            return fmt(nA) + "x^" + nN;
+        }
+        throw new RuntimeException("Не могу продифференцировать: " + t);
+    }
+
+    public static String integrate(String expr) {
+        expr = expr.toLowerCase().replace(" ", "").replace(',', '.');
+        StringBuilder result = new StringBuilder();
+        for (String t : expr.split("(?=[+-])")) {
+            if (t.isEmpty()) continue;
+            String sign = "";
+            if (t.startsWith("+")) t = t.substring(1);
+            else if (t.startsWith("-")) { sign = "-"; t = t.substring(1); }
+            String integ = integralOfTerm(t);
+            if (sign.equals("-")) integ = "-" + integ;
+            else if (result.length() > 0 && !integ.startsWith("-")) integ = "+" + integ;
+            result.append(integ);
+        }
+        String r = result.toString();
+        if (r.startsWith("+")) r = r.substring(1);
+        return r.isEmpty() ? "0" : r;
+    }
+
+    private static String integralOfTerm(String t) {
+        if (t.equals("sin(x)")) return "-cos(x)";
+        if (t.equals("cos(x)")) return "sin(x)";
+        if (t.equals("e^x")) return "e^x";
+        if (t.equals("1/x")) return "ln|x|";
+        if (t.matches("-?\\d+(\\.\\d+)?")) return fmt(parseNum(t)) + "x";
+        Matcher m = Pattern.compile("(-?\\d*\\.?\\d*)\\*?x(?:\\^(\\d+))?").matcher(t);
+        if (m.matches()) {
+            String aStr = m.group(1);
+            double a = aStr.isEmpty() ? 1 : aStr.equals("-") ? -1 : parseNum(aStr);
+            int n = m.group(2) == null ? 1 : Integer.parseInt(m.group(2));
+            int nN = n + 1;
+            double nA = a / nN;
+            return fmt(nA) + "x^" + nN;
+        }
+        throw new RuntimeException("Не могу проинтегрировать: " + t);
+    }
+
+    public static String simplifyExpr(String expr) {
+        expr = expr.replace(" ", "").replace(',', '.');
+        Map<String, Double> terms = new LinkedHashMap<>();
+        for (String p : expr.split("(?=[+-])")) {
+            if (p.isEmpty()) continue;
+            double sign = 1;
+            if (p.startsWith("+")) p = p.substring(1);
+            else if (p.startsWith("-")) { sign = -1; p = p.substring(1); }
+            Matcher m = Pattern.compile("(-?\\d*\\.?\\d*)\\*?([a-z](?:\\^\\d+)?)?").matcher(p);
+            if (m.matches()) {
+                String aStr = m.group(1);
+                double a = aStr.isEmpty() ? 1 : parseNum(aStr);
+                String var = m.group(2) == null ? "" : m.group(2);
+                terms.merge(var, sign * a, Double::sum);
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Double> e : terms.entrySet()) {
+            double v = e.getValue();
+            if (v == 0) continue;
+            String sign = sb.length() == 0 ? (v < 0 ? "-" : "") : (v < 0 ? " - " : " + ");
+            double abs = Math.abs(v);
+            String coeff = (abs == 1 && !e.getKey().isEmpty()) ? "" : fmt(abs);
+            sb.append(sign).append(coeff).append(e.getKey());
+        }
+        return sb.length() == 0 ? "0" : sb.toString();
+    }
+
+    public static String expandExpr(String expr) {
+        expr = expr.replace(" ", "").replace(',', '.');
+        Matcher m = Pattern.compile("\\(([^)]+)\\)\\(([^)]+)\\)").matcher(expr);
+        if (m.matches()) {
+            double[] p1 = parseBinom(m.group(1));
+            double[] p2 = parseBinom(m.group(2));
+            double ac = p1[0] * p2[0];
+            double ad_bc = p1[0] * p2[1] + p1[1] * p2[0];
+            double bd = p1[1] * p2[1];
+            return fmt(ac) + "x^2 + " + fmt(ad_bc) + "x + " + fmt(bd);
+        }
+        throw new RuntimeException("Поддерживается только (ax + b)(cx + d)");
+    }
+
+    private static double[] parseBinom(String s) {
+        Matcher m = Pattern.compile("(-?\\d*\\.?\\d*)\\*?x([+-]\\d+\\.?\\d*)?").matcher(s);
+        if (!m.matches()) throw new RuntimeException("Неверный формат: " + s);
+        String aStr = m.group(1);
+        double a = aStr.isEmpty() ? 1 : aStr.equals("-") ? -1 : parseNum(aStr);
+        double b = m.group(2) == null ? 0 : parseNum(m.group(2));
+        return new double[]{a, b};
+    }
+
+    public static String fmt(double v) {
+        if (v == (long) v) return String.valueOf((long) v);
+        return String.valueOf(v);
+    }
+}
